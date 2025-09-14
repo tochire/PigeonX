@@ -26,7 +26,6 @@
 
 
 
-
 PostgresDB* g_db = nullptr;  // definition, global pointer
 
 int main() {
@@ -34,6 +33,13 @@ int main() {
    g_db = new PostgresDB(g_config.db_conn_str); // initialize dynamically
     if (!g_db->connect()) {
         std::cerr << "Fatal: could not connect to Postgres.\n";
+        return 1;
+    }
+        try {
+        g_db->init_prepared_statements();
+    } catch (const std::exception& e) {
+        std::cerr << "Failed to initialize prepared statements: " << e.what() << std::endl;
+        delete g_db;
         return 1;
     }
     std::cout << "Database connection established.\n";

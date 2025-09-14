@@ -6,7 +6,8 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "spf_check.h"
-
+#include <parser.h>
+#include <pqxx/pqxx> 
 std::mutex g_fileMutex;
 
 
@@ -29,12 +30,20 @@ void send_line(int fd, const std::string& s) {
 void process_smtp_line(ConnState& st, int fd, const std::string& raw) {
     std::string line = raw;
     rstrip_crlf(line);
-
+    mail::EmailMessage msg;
     // DATA state
     if (st.inData) {
-        if (line == ".") {
-            st.inData = false;
+  if (line == ".") {
+        st.inData = false;
+        
+        // Step 1: Parse the raw email data
+        mail::EmailMessage parsedBody = mail::Parser::parse(st.dataBuffer.str());
 
+        // Step 2: Use a transaction for atomicity
+        g_db->begin();
+
+        try {
+            // Step 3: Insert the main email data into the 'emails' table
             std::string escSender = g_db->escape(st.sender);
             std::ostringstream recArray;
             recArray << "{";
@@ -43,22 +52,62 @@ void process_smtp_line(ConnState& st, int fd, const std::string& raw) {
                 recArray << "\"" << g_db->escape(st.recipients[i]) << "\"";
             }
             recArray << "}";
-            std::string escBody = g_db->escape(st.dataBuffer.str());
-            std::ostringstream q;
-            q << "INSERT INTO emails (sender, recipients, body) "
-              << "VALUES ('" << escSender << "', '" << recArray.str() << "', '" << escBody << "');";
 
-            if (!g_db->execute(q.str())) {
-                std::cerr << "Failed to insert email into database\n";
+            std::string escSubject = g_db->escape(parsedBody.subject);
+            std::string escPlainText = g_db->escape(parsedBody.plainTextBody.value_or(""));
+            std::string escHtmlBody = g_db->escape(parsedBody.htmlBody.value_or(""));
+            std::string escRawBody = g_db->escape(st.dataBuffer.str());
+
+            std::ostringstream q_email;
+            q_email << "INSERT INTO emails (sender, recipients, raw_body, subject, plain_text_body, html_body) "
+                    << "VALUES ('" << escSender << "', '" << recArray.str() << "', '" << escRawBody
+                    << "', '" << escSubject << "', '" << escPlainText << "', '" << escHtmlBody << "') "
+                    << "RETURNING id;";
+            
+            pqxx::result emailResult = g_db->execute(q_email.str());
+            int emailId = g_db->getInsertedId(emailResult);
+
+            // Prepare the statement for file insertion once per transaction
+
+            // Step 4: Loop through and insert each attachment
+            for (const auto& attachment : parsedBody.attachments) {
+                std::string escFilename = g_db->escape(attachment.filename);
+                std::string escContentType = g_db->escape(attachment.contentType);
+                pqxx::binarystring binary_content(attachment.content);
+
+                // Execute the prepared statement with parameters
+                pqxx::result fileResult = g_db->execute_prepared(
+                    "file_insert",
+                    escFilename,
+                    escContentType,
+                    binary_content
+                );
+
+                int fileId = g_db->getInsertedId(fileResult);
+
+                // Step 5: Link the email and the file in the junction table
+                std::ostringstream q_link;
+                q_link << "INSERT INTO email_attachments (email_id, file_id) "
+                       << "VALUES (" << emailId << ", " << fileId << ");";
+                g_db->execute(q_link.str());
             }
-
-            st.dataBuffer.str("");
-            st.dataBuffer.clear();
-            st.recipients.clear();
-            st.sender.clear();
-
+            
+            g_db->commit();
             send_line(fd, "250 2.0.0 OK: Message accepted");
-        } else {
+
+        } catch (const std::exception& e) {
+            g_db->rollback();
+            std::cerr << "Database transaction failed: " << e.what() << std::endl;
+            send_line(fd, "554 5.7.0 Message rejected due to server error");
+        }
+
+        st.dataBuffer.str("");
+        st.dataBuffer.clear();
+        st.recipients.clear();
+        st.sender.clear();
+    }
+
+ else {
             st.dataBuffer << line << "\n";
         }
         return;

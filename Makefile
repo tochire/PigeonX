@@ -7,6 +7,7 @@ OBJ_DIR = obj
 BIN = pigeonX
 
 SRC = $(wildcard $(SRC_DIR)/*.cpp)
+
 OBJ = $(patsubst $(SRC_DIR)/%.cpp,$(OBJ_DIR)/%.o,$(SRC))
 
 $(BIN): $(OBJ)
