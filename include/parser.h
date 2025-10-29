@@ -16,6 +16,7 @@ struct BodyPart {
 
 struct EmailMessage {
     std::string from;
+    std::optional<std::string> senderName;
     std::string to;
     std::string cc;
     std::string subject;
@@ -46,7 +47,7 @@ private:
     // New helper functions
     static std::string decodeHeaderValue(const std::string &value);
     static std::string extractParameter(const std::string &headerValue, const std::string &paramName);
-    
+    static std::string extractSenderName(const std::string& fromHeader); 
     // Debug function to help identify parsing issues
     static void debugPrint(const std::string& message, const std::string& content = "");
 };

@@ -92,7 +92,7 @@ int main() {
           char ip_str[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &(cli.sin_addr), ip_str, INET_ADDRSTRLEN);
         // Send banner immediately (non-blocking best-effort)
-        send_line(cfd, "220 mx.benamor.pro ESMTP SimpleSMTP");
+        send_line(cfd, "220 mx.distyn.com ESMTP PigeonX");
 
         epoll_event ev{};
         ev.events = EPOLLIN | EPOLLET; // edge-triggered for efficiency

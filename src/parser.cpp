@@ -415,6 +415,7 @@ void Parser::parseTopLevelBody(const std::map<std::string,std::string>& headers,
         }
         return;
     }
+
     // single part: trim leading/trailing newlines and whitespace
     size_t s = 0;
     while (s < body.size() && (body[s] == '\r' || body[s] == '\n')) ++s;
@@ -479,7 +480,22 @@ void Parser::parseTopLevelBody(const std::map<std::string,std::string>& headers,
         out.attachments.push_back(std::move(att));
     }
 }
+ std::string Parser::extractSenderName(const std::string& fromHeader) {
+    size_t ltPos = fromHeader.find('<');
+    if (ltPos == std::string::npos) {
+        // No angle brackets found, assume the entire string is the name or email
+        // In the format "email@example.com"
+        size_t atPos = fromHeader.find('@');
+        if (atPos != std::string::npos) {
+            return ""; // No name, just an email address
+        }
+        return fromHeader; // Assume it's a name without an email
+    }
 
+    // A name and email were found in the format "Name <email>"
+    std::string namePart = fromHeader.substr(0, ltPos);
+    return trim(namePart);
+}
 
 // --- public parse entry ---------------------------------------------------
 EmailMessage Parser::parse(const std::string& rawMessage) {
@@ -496,6 +512,7 @@ EmailMessage Parser::parse(const std::string& rawMessage) {
         return it == hdrs.end() ? std::string() : it->second;
     };
     out.from = geth("From");
+     out.senderName = extractSenderName(out.from); 
     out.to = geth("To");
     out.cc = geth("Cc");
     out.subject = geth("Subject");

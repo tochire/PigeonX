@@ -56,11 +56,12 @@ void process_smtp_line(ConnState& st, int fd, const std::string& raw) {
             std::string escSubject = g_db->escape(parsedBody.subject);
             std::string escPlainText = g_db->escape(parsedBody.plainTextBody.value_or(""));
             std::string escHtmlBody = g_db->escape(parsedBody.htmlBody.value_or(""));
+            std:: string escSenderName = g_db->escape(parsedBody.senderName.value_or(""));
             std::string escRawBody = g_db->escape(st.dataBuffer.str());
 
             std::ostringstream q_email;
-            q_email << "INSERT INTO emails (sender, recipients, raw_body, subject, plain_text_body, html_body) "
-                    << "VALUES ('" << escSender << "', '" << recArray.str() << "', '" << escRawBody
+            q_email << "INSERT INTO emails (sender, senderName, recipients, raw_body, subject, plain_text_body, html_body) "
+                    << "VALUES ('" << escSender << "', '" << escSenderName << "', '" << recArray.str() << "', '" << escRawBody
                     << "', '" << escSubject << "', '" << escPlainText << "', '" << escHtmlBody << "') "
                     << "RETURNING id;";
             
@@ -119,7 +120,7 @@ void process_smtp_line(ConnState& st, int fd, const std::string& raw) {
         size_t space_pos = line.find(' ');
         if (space_pos != std::string::npos) client_name = line.substr(space_pos + 1);
 
-        send_line(fd, "250-mx.benamor.pro Hello " + client_name);
+        send_line(fd, "250-mx.distyn.com Hello " + client_name);
         send_line(fd, "250-SIZE 35882577");
         send_line(fd, "250-8BITMIME");
         send_line(fd, "250-PIPELINING");
